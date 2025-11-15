@@ -1,6 +1,6 @@
-// main.js - Apify Actor Entry Point
+// main.js - Apify Actor Entry Point with Custom Scraper
 import { Actor } from 'apify';
-import { ApifyClient } from 'apify-client';
+import { CheerioCrawler } from 'crawlee';
 import TurndownService from 'turndown';
 import fs from 'fs/promises';
 import path from 'path';
@@ -41,7 +41,7 @@ await Actor.main(async () => {
     }
 
     try {
-        // Step 1: Scrape the website using Apify's Website Content Crawler
+        // Step 1: Scrape the website using custom Cheerio crawler
         console.log('Step 1: Scraping website...');
         const scrapedData = await scrapeWebsite(validUrl);
 
@@ -76,28 +76,93 @@ await Actor.main(async () => {
 });
 
 /**
- * Scrape website using Apify's Website Content Crawler
+ * Scrape website using Crawlee's CheerioCrawler (lightweight, free)
  */
 async function scrapeWebsite(url) {
-    const client = new ApifyClient({
-        token: process.env.APIFY_TOKEN
+    return new Promise((resolve, reject) => {
+        let scrapedData = null;
+
+        const crawler = new CheerioCrawler({
+            maxRequestsPerCrawl: 1,
+            requestHandler: async ({ request, $, body }) => {
+                console.log(`Scraping: ${request.url}`);
+
+                // Extract title
+                const title = $('title').text() || 
+                             $('h1').first().text() || 
+                             $('meta[property="og:title"]').attr('content') ||
+                             'Untitled';
+
+                // Extract meta description
+                const description = $('meta[name="description"]').attr('content') ||
+                                  $('meta[property="og:description"]').attr('content') ||
+                                  '';
+
+                // Extract author
+                const author = $('meta[name="author"]').attr('content') ||
+                             $('meta[property="article:author"]').attr('content') ||
+                             '';
+
+                // Extract main content
+                // Try common content containers
+                let content = '';
+                const contentSelectors = [
+                    'article',
+                    'main',
+                    '[role="main"]',
+                    '.content',
+                    '.post-content',
+                    '.article-content',
+                    '#content',
+                    'body'
+                ];
+
+                for (const selector of contentSelectors) {
+                    const element = $(selector).first();
+                    if (element.length > 0) {
+                        // Remove script, style, nav, header, footer
+                        element.find('script, style, nav, header, footer, .advertisement').remove();
+                        content = element.html();
+                        break;
+                    }
+                }
+
+                // If still no content, get the whole body
+                if (!content) {
+                    $('script, style, nav, header, footer').remove();
+                    content = $('body').html() || body;
+                }
+
+                // Extract text for preview
+                const text = $.text().trim().substring(0, 500);
+
+                scrapedData = {
+                    url: request.url,
+                    title: title.trim(),
+                    html: content,
+                    text: text,
+                    metadata: {
+                        description: description.trim(),
+                        author: author.trim()
+                    }
+                };
+            },
+            failedRequestHandler: async ({ request }) => {
+                console.error(`Request ${request.url} failed`);
+                reject(new Error(`Failed to scrape ${request.url}`));
+            }
+        });
+
+        crawler.run([url])
+            .then(() => {
+                if (scrapedData) {
+                    resolve(scrapedData);
+                } else {
+                    reject(new Error('No data scraped from URL'));
+                }
+            })
+            .catch(reject);
     });
-
-    // Run Website Content Crawler Actor
-    const run = await client.actor('apify/website-content-crawler').call({
-        startUrls: [{ url }],
-        maxCrawlPages: 1,
-        crawlerType: 'cheerio'
-    });
-
-    // Fetch results
-    const { items } = await client.dataset(run.defaultDatasetId).listItems();
-    
-    if (!items || items.length === 0) {
-        throw new Error('No content scraped from URL');
-    }
-
-    return items[0];
 }
 
 /**
@@ -109,34 +174,52 @@ function convertToMarkdown(data, addMetadata, tags) {
     // Add YAML front-matter
     if (addMetadata) {
         markdown += '---\n';
-        markdown += `title: "${data.title || 'Untitled'}"\n`;
+        markdown += `title: "${data.title.replace(/"/g, '\\"')}"\n`;
         markdown += `url: ${data.url}\n`;
         markdown += `scraped: ${new Date().toISOString()}\n`;
         if (tags.length > 0) {
             markdown += `tags: [${tags.join(', ')}]\n`;
         }
+        if (data.metadata.description) {
+            markdown += `description: "${data.metadata.description.replace(/"/g, '\\"')}"\n`;
+        }
+        if (data.metadata.author) {
+            markdown += `author: "${data.metadata.author.replace(/"/g, '\\"')}"\n`;
+        }
         markdown += '---\n\n';
     }
 
     // Add title
-    markdown += `# ${data.title || 'Untitled'}\n\n`;
+    markdown += `# ${data.title}\n\n`;
 
     // Add source link
-    markdown += `> Source: [${data.url}](${data.url})\n\n`;
+    markdown += `> 🔗 Source: [${data.url}](${data.url})\n\n`;
+
+    // Add scraped date
+    markdown += `> 📅 Scraped: ${new Date().toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+    })}\n\n`;
+
+    markdown += '---\n\n';
 
     // Convert HTML content to Markdown
-    if (data.text) {
-        markdown += data.text + '\n\n';
-    } else if (data.html) {
+    if (data.html) {
         const converted = turndownService.turndown(data.html);
         markdown += converted + '\n\n';
     }
 
-    // Add metadata section
-    if (data.metadata) {
+    // Add metadata section at the bottom
+    if (data.metadata.description || data.metadata.author) {
+        markdown += '\n---\n\n';
         markdown += '## Metadata\n\n';
-        markdown += `- **Author:** ${data.metadata.author || 'N/A'}\n`;
-        markdown += `- **Description:** ${data.metadata.description || 'N/A'}\n`;
+        if (data.metadata.author) {
+            markdown += `- **Author:** ${data.metadata.author}\n`;
+        }
+        if (data.metadata.description) {
+            markdown += `- **Description:** ${data.metadata.description}\n`;
+        }
     }
 
     return markdown;
