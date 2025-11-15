@@ -94,7 +94,7 @@
       "type": "integer",
       "description": "Delay in milliseconds between requests in bulk mode",
       "default": 2000,
-      "editor": "textfield"
+      "editor": "number"
     },
     "downloadImages": {
       "title": "Download Images",
