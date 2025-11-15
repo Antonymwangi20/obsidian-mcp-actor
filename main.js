@@ -33,10 +33,17 @@ await Actor.main(async () => {
         throw new Error('URL and vaultPath are required inputs');
     }
 
+    // Ensure URL has protocol
+    let validUrl = url;
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        validUrl = 'https://' + url;
+        console.log('Added https:// protocol to URL:', validUrl);
+    }
+
     try {
         // Step 1: Scrape the website using Apify's Website Content Crawler
         console.log('Step 1: Scraping website...');
-        const scrapedData = await scrapeWebsite(url);
+        const scrapedData = await scrapeWebsite(validUrl);
 
         // Step 2: Convert HTML to Markdown
         console.log('Step 2: Converting to Markdown...');
