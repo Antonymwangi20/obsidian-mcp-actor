@@ -3,13 +3,6 @@ apify_storage/
 .env
 *.log
 .DS_Store
-MIGRATION_GUIDE.md
-IMPLEMENTATION_*.md
-FEATURES_PROGRESS.md
 storage
-FIX_SUMMARY.md
 .vscode/
 .idea/
-README_DATASET.md
-RESULTS_VIEWER.md
-UI_UX_GUIDE.md

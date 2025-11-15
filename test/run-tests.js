@@ -57,16 +57,22 @@ async function runIntegrationTest() {
 
     // create input.json for integration
     const input = {
-        url: 'https://simple-authx-lp.vercel.app',
-        vaultPath: tempVault,
-        folderPath: 'scraped',
-        addMetadata: true,
-        autoTag: true,
-        autoLink: false,
-        bulkMode: false,
-        updateExisting: false,
-        rateLimitDelay: 500,
-        downloadImages: false
+        "urls": [
+            "https://simple-authx-lp.vercel.app",
+            "https://example.com",
+            "https://www.design.com/website-builder?code=webmasem&utm_medium=cpc&utm_source=google&utm_campaign=row_website_builder_ai_max&utm_adgroup=websites&utm_content=768598867564&utm_keyword=site+creator&utm_network=g&gad_source=1&gad_campaignid=21716717486&gclid=EAIaIQobChMIyOWWrv70kAMVUqb9BR1xgR2_EAAYAyAAEgLnJ_D_BwE"
+        ],
+        "vaultPath": "/home/mwangi/Documents/ObsidianMCP",
+        "folderPath": "brand",
+        "addMetadata": true,
+        "tags": ["test"],
+        "autoTag": true,
+        "bulkMode": true,
+        "autoLink": false,
+        "updateExisting": false,
+        "rateLimitDelay": 500,
+        "downloadImages": true
+
     };
     const inputFile = path.join(process.cwd(), 'input.json');
     await fs.writeFile(inputFile, JSON.stringify(input, null, 2));

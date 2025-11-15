@@ -109,6 +109,20 @@
       "description": "Subfolder inside the note folder to store downloaded images",
       "default": "images",
       "editor": "textfield"
+    },
+    "usePlaywright": {
+      "title": "Use Playwright Mode",
+      "type": "boolean",
+      "description": "Enable Playwright browser automation for JavaScript-heavy sites. Use when CheerioCrawler fails. WARNING: Much slower and more resource-intensive",
+      "default": false,
+      "editor": "checkbox"
+    },
+    "playwrightTimeout": {
+      "title": "Playwright Timeout (seconds)",
+      "type": "integer",
+      "description": "Maximum time to wait for page load in Playwright mode",
+      "default": 30,
+      "editor": "number"
     }
   },
   "required": ["vaultPath"]

@@ -1,6 +1,6 @@
 // main.js - Apify Actor Entry Point with Custom Scraper
 import { Actor } from 'apify';
-import { CheerioCrawler } from 'crawlee';
+import { CheerioCrawler, PlaywrightCrawler, PuppeteerCrawler } from 'crawlee';
 import TurndownService from 'turndown';
 import cheerio from 'cheerio';
 import fs from 'fs/promises';
@@ -64,7 +64,9 @@ await Actor.main(async () => {
         templatePath = null,
         rateLimitDelay = 2000, // ms between requests in bulk mode
         downloadImages = false,
-        imagesFolder = 'images'
+        imagesFolder = 'images',
+        usePlaywright = false,
+        playwrightTimeout = 30
     } = actualInput;
 
     // Performance metrics
@@ -107,7 +109,14 @@ await Actor.main(async () => {
             // Step 1: Scrape the website (with retry/backoff)
             console.log('Step 1: Scraping website...');
             const urlStartTime = Date.now();
-            const scrapedData = await scrapeWebsite(validUrl, 3);
+            
+            let scrapedData;
+            if (usePlaywright) {
+                console.log('  → Using Playwright mode (JavaScript rendering enabled)');
+                scrapedData = await scrapeWebsitePlaywright(validUrl, 3, playwrightTimeout);
+            } else {
+                scrapedData = await scrapeWebsite(validUrl, 3);
+            }
 
                     // Extract images (if any) and attach to scrapedData
             try {
@@ -234,7 +243,7 @@ await Actor.main(async () => {
     });
 });
 
-import { sanitizeFileName, validateContent, extractTags, loadTemplateConfig, loadVaultConfig, extractImagesFromHtml, downloadImages, checkDuplicateNote } from './lib/helpers.js';
+import { sanitizeFileName, validateContent, extractTags, loadTemplateConfig, loadVaultConfig, extractImagesFromHtml, downloadImages, checkDuplicateNote, scrapeWebsitePlaywright, scrapeWebsiteCheerio, scrapeWebsite, scrapeWebsiteWithFailover, scrapeMany, ScrapeCache, getRandomUserAgent, setupPlaywrightStealth, scrapeWebsitePlaywrightEnhanced } from './lib/helpers.js';
 
 /**
  * FEATURE 3: Update internal links in related notes
@@ -317,108 +326,6 @@ async function scanVaultForNotes(vaultPath) {
     }
     
     return notes;
-}
-
-/**
- * Scrape website using Crawlee's CheerioCrawler with retry/backoff
- */
-async function scrapeWebsite(url, retries = 3) {
-    const runOnce = () => new Promise((resolve, reject) => {
-        let scrapedData = null;
-
-        const crawler = new CheerioCrawler({
-            maxRequestsPerCrawl: 1,
-            requestHandler: async ({ request, $, body }) => {
-                console.log(`Scraping: ${request.url}`);
-
-                // Extract title
-                const title = $('title').text() || 
-                             $('h1').first().text() || 
-                             $('meta[property="og:title"]').attr('content') ||
-                             'Untitled';
-
-                // Extract meta description
-                const description = $('meta[name="description"]').attr('content') ||
-                                  $('meta[property="og:description"]').attr('content') ||
-                                  '';
-
-                // Extract author
-                const author = $('meta[name="author"]').attr('content') ||
-                             $('meta[property="article:author"]').attr('content') ||
-                             '';
-
-                // Extract main content
-                let content = '';
-                const contentSelectors = [
-                    'article', 'main', '[role="main"]', '.content', '.post-content',
-                    '.article-content', '#content', 'body'
-                ];
-
-                for (const selector of contentSelectors) {
-                    const element = $(selector).first();
-                    if (element.length > 0) {
-                        element.find('script, style, nav, header, footer, .advertisement').remove();
-                        content = element.html();
-                        break;
-                    }
-                }
-
-                if (!content) {
-                    $('script, style, nav, header, footer').remove();
-                    content = $('body').html() || body;
-                }
-
-                const text = $.text().trim().substring(0, 500);
-
-                scrapedData = {
-                    url: request.url,
-                    title: title.trim(),
-                    html: content,
-                    text: text,
-                    metadata: {
-                        description: description.trim(),
-                        author: author.trim()
-                    }
-                };
-            },
-            failedRequestHandler: async ({ request }) => {
-                console.error(`Request ${request.url} failed`);
-                reject(new Error(`Failed to scrape ${request.url}`));
-            }
-        });
-
-        crawler.run([url])
-            .then(() => {
-                if (scrapedData) {
-                    resolve(scrapedData);
-                } else {
-                    reject(new Error('No data scraped from URL'));
-                }
-            })
-            .catch(reject);
-    });
-
-    // Retry loop with exponential backoff
-    let lastErr = null;
-    for (let attempt = 1; attempt <= retries; attempt++) {
-        try {
-            const result = await runOnce();
-            // Track approximate bytes downloaded if available
-            if (result && result.html) {
-                result._bytes = Buffer.byteLength(result.html, 'utf8');
-            }
-            return result;
-        } catch (err) {
-            lastErr = err;
-            console.warn(`Attempt ${attempt}/${retries} failed for ${url}: ${err.message}`);
-            if (attempt < retries) {
-                const wait = attempt * 1000;
-                await new Promise(res => setTimeout(res, wait));
-            }
-        }
-    }
-
-    throw lastErr || new Error('Failed to scrape URL');
 }
 
 /**
