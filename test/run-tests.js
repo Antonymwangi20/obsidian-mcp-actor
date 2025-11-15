@@ -69,10 +69,10 @@ async function runIntegrationTest() {
         "autoTag": true,
         "bulkMode": true,
         "autoLink": false,
-        "updateExisting": false,
+        "updateExisting": true,
         "rateLimitDelay": 500,
-        "downloadImages": true
-
+        "downloadImages": true,
+        "usePlaywright": true
     };
     const inputFile = path.join(process.cwd(), 'input.json');
     await fs.writeFile(inputFile, JSON.stringify(input, null, 2));

@@ -13,7 +13,8 @@
   "autoTag": true,
   "bulkMode": true,
   "autoLink": false,
-  "updateExisting": false,
+  "updateExisting": true,
   "rateLimitDelay": 500,
-  "downloadImages": true
+  "downloadImages": true,
+  "usePlaywright": true
 }

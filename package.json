@@ -1,6 +1,6 @@
 {
   "name": "obsidian-mcp-actor",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Apify Actor that scrapes websites and saves content to Obsidian vault",
   "type": "module",
   "main": "main.js",
