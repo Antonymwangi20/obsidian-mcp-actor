@@ -6,16 +6,23 @@
     "url": {
       "title": "Website URL",
       "type": "string",
-      "description": "The URL of the website to scrape",
+      "description": "The URL of the website to scrape (use this for single scrapes)",
       "editor": "textfield",
       "example": "https://example.com/article"
+    },
+    "urls": {
+      "title": "Multiple URLs (Bulk Mode)",
+      "type": "array",
+      "description": "Array of URLs to scrape in bulk. Use when bulkMode is true",
+      "editor": "stringList",
+      "example": ["https://example.com/article1", "https://example.com/article2"]
     },
     "vaultPath": {
       "title": "Obsidian Vault Path",
       "type": "string",
       "description": "Absolute path to your Obsidian vault folder",
       "editor": "textfield",
-      "example": "/Users/yourname/Documents/MyVault"
+      "example": "/Path/to/your/Vault"
     },
     "noteName": {
       "title": "Note Name (Optional)",
@@ -40,13 +47,48 @@
       "editor": "checkbox"
     },
     "tags": {
-      "title": "Tags",
+      "title": "Manual Tags",
       "type": "array",
-      "description": "Tags to add to the note",
+      "description": "Manual tags to add to the note",
       "editor": "stringList",
       "default": [],
       "example": ["research", "web-scraping"]
+    },
+    "autoTag": {
+      "title": "Intelligent Auto-Tagging",
+      "type": "boolean",
+      "description": "Automatically generate tags from content analysis",
+      "default": true,
+      "editor": "checkbox"
+    },
+    "autoLink": {
+      "title": "Automatic Internal Linking",
+      "type": "boolean",
+      "description": "Automatically link related notes based on shared tags",
+      "default": true,
+      "editor": "checkbox"
+    },
+    "bulkMode": {
+      "title": "Bulk Import Mode",
+      "type": "boolean",
+      "description": "Set to true to process multiple URLs at once",
+      "default": false,
+      "editor": "checkbox"
+    },
+    "updateExisting": {
+      "title": "Update Existing Notes",
+      "type": "boolean",
+      "description": "Allow updating of existing notes with fresh content",
+      "default": false,
+      "editor": "checkbox"
+    },
+    "templatePath": {
+      "title": "Template Path (Optional)",
+      "type": "string",
+      "description": "Path to an Obsidian template file to define scraping parameters and format",
+      "editor": "textfield",
+      "example": "templates/scraper-template"
     }
   },
-  "required": ["url", "vaultPath"]
+  "required": ["vaultPath"]
 }

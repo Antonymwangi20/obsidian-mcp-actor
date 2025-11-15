@@ -3,4 +3,10 @@ apify_storage/
 .env
 *.log
 .DS_Store
-README.md
+MIGRATION_GUIDE.md
+IMPLEMENTATION_*.md
+FEATURES_PROGRESS.md
+storage
+FIX_SUMMARY.md
+.vscode/
+.idea/

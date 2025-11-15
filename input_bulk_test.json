@@ -1,0 +1,12 @@
+{
+  "urls": [
+    "https://simple-authx-lp.vercel.app",
+    "https://example.com"
+  ],
+  "vaultPath": "/home/mwangi/Documents/ObsidianMCP",
+  "folderPath": "scraped",
+  "addMetadata": true,
+  "tags": ["test"],
+  "autoTag": true,
+  "bulkMode": true
+}

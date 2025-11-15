@@ -12,68 +12,250 @@ const turndownService = new TurndownService({
     bulletListMarker: '-'
 });
 
+// FEATURE 1: Intelligent tagging - Curated keywords for auto-tag extraction
+const COMMON_KEYWORDS = [
+    'research', 'analysis', 'data', 'technology', 'science', 'business',
+    'education', 'health', 'finance', 'marketing', 'design', 'development',
+    'artificial intelligence', 'machine learning', 'cloud', 'security',
+    'sustainability', 'innovation', 'strategy', 'management', 'culture'
+];
+
 await Actor.main(async () => {
     // Get input from Apify Actor
     const input = await Actor.getInput();
+
+    // If no input from Actor, try to load input.json for local testing
+    let actualInput = input;
+    if (!actualInput) {
+        try {
+            const inputData = await fs.readFile('./input.json', 'utf-8');
+            actualInput = JSON.parse(inputData);
+            console.log('✓ Loaded input from input.json');
+        } catch (e) {
+            // Ignore errors, will fail validation below
+            actualInput = {};
+        }
+    }
+
     const {
         url,
+        urls = [],
         vaultPath,
         noteName,
         folderPath = 'scraped',
         addMetadata = true,
-        tags = []
-    } = input;
+        tags = [],
+        autoTag = true,
+        autoLink = true,
+        bulkMode = false
+    } = actualInput;
 
     console.log('Starting Obsidian MCP Actor...');
-    console.log('URL:', url);
-    console.log('Vault Path:', vaultPath);
-
-    // Validate inputs
-    if (!url || !vaultPath) {
-        throw new Error('URL and vaultPath are required inputs');
+    
+    // FEATURE 2: Bulk mode support
+    let urlsToProcess = [];
+    if (bulkMode && urls.length > 0) {
+        console.log(`Bulk Mode: Processing ${urls.length} URLs`);
+        urlsToProcess = urls;
+    } else if (url) {
+        console.log('Single Mode: Processing 1 URL');
+        urlsToProcess = [url];
     }
 
-    // Ensure URL has protocol
-    let validUrl = url;
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-        validUrl = 'https://' + url;
-        console.log('Added https:// protocol to URL:', validUrl);
+    if (urlsToProcess.length === 0 || !vaultPath) {
+        throw new Error('Either url or urls array is required, along with vaultPath');
     }
 
-    try {
-        // Step 1: Scrape the website using custom Cheerio crawler
-        console.log('Step 1: Scraping website...');
-        const scrapedData = await scrapeWebsite(validUrl);
+    // Process URLs with results tracking
+    const results = [];
+    
+    for (const processUrl of urlsToProcess) {
+        console.log(`\n━━ Processing: ${processUrl} ━━`);
+        try {
+            // Normalize URL
+            let validUrl = processUrl;
+            if (!processUrl.startsWith('http://') && !processUrl.startsWith('https://')) {
+                validUrl = 'https://' + processUrl;
+            }
 
-        // Step 2: Convert HTML to Markdown
-        console.log('Step 2: Converting to Markdown...');
-        const markdown = convertToMarkdown(scrapedData, addMetadata, tags);
+            // Step 1: Scrape the website
+            console.log('Step 1: Scraping website...');
+            const scrapedData = await scrapeWebsite(validUrl);
 
-        // Step 3: Save to Obsidian vault
-        console.log('Step 3: Saving to Obsidian vault...');
-        const fileName = noteName || sanitizeFileName(scrapedData.title || 'untitled');
-        await saveToVault(vaultPath, folderPath, fileName, markdown);
+            // FEATURE 1: Auto-tag generation
+            let finalTags = [...tags];
+            if (autoTag) {
+                console.log('Step 1b: Analyzing content for intelligent tags...');
+                const extractedTags = extractTags(scrapedData);
+                finalTags = [...new Set([...tags, ...extractedTags])]; // Deduplicate
+                console.log('✓ Auto-generated tags:', extractedTags.join(', '));
+            }
 
-        console.log('✓ Successfully created note:', fileName);
+            // Step 2: Convert HTML to Markdown
+            console.log('Step 2: Converting to Markdown...');
+            const markdown = convertToMarkdown(scrapedData, addMetadata, finalTags);
 
-        // Output result
-        await Actor.pushData({
-            success: true,
-            notePath: path.join(folderPath, `${fileName}.md`),
-            title: scrapedData.title,
-            url: scrapedData.url,
-            timestamp: new Date().toISOString()
-        });
+            // Step 3: Save to Obsidian vault
+            console.log('Step 3: Saving to Obsidian vault...');
+            const fileName = noteName || sanitizeFileName(scrapedData.title || 'untitled');
+            await saveToVault(vaultPath, folderPath, fileName, markdown);
 
-    } catch (error) {
-        console.error('Error:', error.message);
-        await Actor.pushData({
-            success: false,
-            error: error.message
-        });
-        throw error;
+            // FEATURE 3: Auto internal linking
+            if (autoLink) {
+                console.log('Step 4: Adding internal links...');
+                try {
+                    await updateInternalLinks(vaultPath, fileName, finalTags);
+                    console.log('✓ Internal linking completed');
+                } catch (linkError) {
+                    console.warn('⚠ Warning: Could not update internal links:', linkError.message);
+                }
+            }
+
+            console.log('✓ Successfully created note:', fileName);
+
+            // Track success
+            results.push({
+                success: true,
+                url: processUrl,
+                notePath: path.join(folderPath, `${fileName}.md`),
+                title: scrapedData.title,
+                tags: finalTags,
+                timestamp: new Date().toISOString()
+            });
+
+        } catch (urlError) {
+            console.error(`✗ Error processing ${processUrl}:`, urlError.message);
+            // Track failure but continue
+            results.push({
+                success: false,
+                url: processUrl,
+                error: urlError.message
+            });
+        }
     }
+
+    // Output batch results
+    if (bulkMode && results.length > 1) {
+        console.log(`\n━━ BULK IMPORT SUMMARY ━━`);
+        console.log(`Total: ${results.length} URLs processed`);
+        console.log(`Successful: ${results.filter(r => r.success).length}`);
+        console.log(`Failed: ${results.filter(r => !r.success).length}`);
+    }
+
+    await Actor.pushData({
+        success: results.every(r => r.success),
+        processedCount: results.length,
+        results: results
+    });
 });
+
+/**
+ * FEATURE 1: Extract intelligent tags from content
+ */
+function extractTags(scrapedData) {
+    const text = (scrapedData.title + ' ' + scrapedData.metadata.description + ' ' + scrapedData.text).toLowerCase();
+    const foundTags = [];
+
+    for (const keyword of COMMON_KEYWORDS) {
+        if (text.includes(keyword.toLowerCase())) {
+            foundTags.push(keyword);
+        }
+    }
+
+    // Also extract domain-based tag
+    try {
+        const url = new URL(scrapedData.url);
+        const domain = url.hostname.replace('www.', '').split('.')[0];
+        foundTags.push(domain);
+    } catch (e) {
+        // Ignore URL parsing errors
+    }
+
+    return [...new Set(foundTags)]; // Remove duplicates
+}
+
+/**
+ * FEATURE 3: Update internal links in related notes
+ */
+async function updateInternalLinks(vaultPath, newNoteName, tags) {
+    try {
+        // Scan vault for existing notes
+        const existingNotes = await scanVaultForNotes(vaultPath);
+        
+        let linkCount = 0;
+        for (const note of existingNotes) {
+            if (note.fileName === newNoteName) continue; // Skip self-references
+            
+            // Check for shared tags
+            const sharedTags = tags.filter(t => note.tags && note.tags.includes(t));
+            if (sharedTags.length > 0) {
+                // Add bidirectional link
+                const fullPath = path.join(vaultPath, note.path);
+                let content = await fs.readFile(fullPath, 'utf-8');
+                
+                // Check if link doesn't already exist
+                if (!content.includes(`[[${newNoteName}]]`)) {
+                    const linkLine = `\n- Related: [[${newNoteName}]]`;
+                    await fs.appendFile(fullPath, linkLine, 'utf-8');
+                    linkCount++;
+                }
+            }
+        }
+        
+        if (linkCount > 0) {
+            console.log(`  → Added ${linkCount} cross-reference link(s)`);
+        }
+    } catch (error) {
+        // Non-fatal error - vault might not exist yet
+        if (error.code !== 'ENOENT') {
+            throw error;
+        }
+    }
+}
+
+/**
+ * FEATURE 3: Scan vault for notes and extract tags
+ */
+async function scanVaultForNotes(vaultPath) {
+    const notes = [];
+    
+    const scan = async (dir, relativePath = '') => {
+        try {
+            const items = await fs.readdir(dir);
+            
+            for (const item of items) {
+                const fullPath = path.join(dir, item);
+                const stats = await fs.stat(fullPath);
+                const relPath = path.join(relativePath, item);
+                
+                if (stats.isDirectory() && !item.startsWith('.')) {
+                    await scan(fullPath, relPath);
+                } else if (item.endsWith('.md')) {
+                    const content = await fs.readFile(fullPath, 'utf-8');
+                    const tagsMatch = content.match(/tags:\s*\[(.*?)\]/);
+                    const extractedTags = tagsMatch ? 
+                        tagsMatch[1].split(',').map(t => t.trim().replace(/['"]/g, '')) : [];
+                    
+                    notes.push({
+                        fileName: item.replace('.md', ''),
+                        path: relPath,
+                        tags: extractedTags
+                    });
+                }
+            }
+        } catch (error) {
+            // Ignore directory scan errors
+        }
+    };
+    
+    try {
+        await scan(vaultPath);
+    } catch (error) {
+        // Vault doesn't exist yet, return empty
+    }
+    
+    return notes;
+}
 
 /**
  * Scrape website using Crawlee's CheerioCrawler (lightweight, free)
@@ -196,7 +378,7 @@ function convertToMarkdown(data, addMetadata, tags) {
     markdown += `> 🔗 Source: [${data.url}](${data.url})\n\n`;
 
     // Add scraped date
-    markdown += `> 📅 Scraped: ${new Date().toLocaleDateString('en-US', { 
+    markdown += `> �� Scraped: ${new Date().toLocaleDateString('en-US', { 
         year: 'numeric', 
         month: 'long', 
         day: 'numeric' 
