@@ -88,6 +88,27 @@
       "description": "Path to an Obsidian template file to define scraping parameters and format",
       "editor": "textfield",
       "example": "templates/scraper-template"
+    },
+    "rateLimitDelay": {
+      "title": "Rate Limit Delay (ms)",
+      "type": "integer",
+      "description": "Delay in milliseconds between requests in bulk mode",
+      "default": 2000,
+      "editor": "textfield"
+    },
+    "downloadImages": {
+      "title": "Download Images",
+      "type": "boolean",
+      "description": "Whether to download images found on the page into the vault",
+      "default": false,
+      "editor": "checkbox"
+    },
+    "imagesFolder": {
+      "title": "Images Folder",
+      "type": "string",
+      "description": "Subfolder inside the note folder to store downloaded images",
+      "default": "images",
+      "editor": "textfield"
     }
   },
   "required": ["vaultPath"]
