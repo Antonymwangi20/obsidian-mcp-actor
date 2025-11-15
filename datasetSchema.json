@@ -1,0 +1,78 @@
+{
+  "title": "Obsidian MCP Actor Results",
+  "description": "Results from web scraping and importing content to Obsidian vault with intelligent tagging and linking",
+  "type": "object",
+  "properties": {
+    "success": {
+      "title": "Overall Success",
+      "description": "Whether all processed URLs were successful (true if all succeeded)",
+      "type": "boolean",
+      "example": true
+    },
+    "processedCount": {
+      "title": "Total URLs Processed",
+      "description": "Total number of URLs processed in this run",
+      "type": "integer",
+      "example": 2
+    },
+    "results": {
+      "title": "Detailed Results",
+      "description": "Array of results for each processed URL",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "title": "URL Success Status",
+            "description": "Whether this specific URL was successfully processed",
+            "type": "boolean",
+            "example": true
+          },
+          "url": {
+            "title": "Source URL",
+            "description": "The URL that was processed",
+            "type": "string",
+            "format": "uri",
+            "example": "https://example.com/article"
+          },
+          "notePath": {
+            "title": "Note File Path",
+            "description": "Relative path to the created note in the vault",
+            "type": "string",
+            "example": "scraped/example-article.md"
+          },
+          "title": {
+            "title": "Article/Page Title",
+            "description": "The title extracted from the scraped content",
+            "type": "string",
+            "example": "Understanding Web Scraping"
+          },
+          "tags": {
+            "title": "Applied Tags",
+            "description": "Auto-generated and manual tags applied to the note",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": ["research", "technology", "web-scraping"]
+          },
+          "timestamp": {
+            "title": "Processing Timestamp",
+            "description": "ISO 8601 timestamp when the note was created",
+            "type": "string",
+            "format": "date-time",
+            "example": "2025-11-15T19:30:45.123Z"
+          },
+          "error": {
+            "title": "Error Message",
+            "description": "Error message if the URL processing failed (only present if success=false)",
+            "type": "string",
+            "example": "Failed to scrape https://example.com: Connection timeout"
+          }
+        },
+        "required": ["success", "url", "timestamp"]
+      }
+    }
+  },
+  "required": ["success", "processedCount", "results"]
+}
