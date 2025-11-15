@@ -1,4 +1,5 @@
-FROM apify/actor-node:20
+FROM apify/actor-node-playwright:20
+
 
 # Install Playwright system dependencies
 RUN npx playwright install-deps
