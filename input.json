@@ -1,12 +1,12 @@
 {
   "url": "https://simple-authx-lp.vercel.app",
-  "vaultPath": "/home/mwangi/Documents/ObsidianMCP",
-  "noteName": "simple authx",
+  "vaultPath": "/home/mwangi/obsidian-mcp-actor/test-integration-vault",
   "folderPath": "scraped",
   "addMetadata": true,
-  "tags": ["research"],
   "autoTag": true,
-  "autoLink": true,
+  "autoLink": false,
   "bulkMode": false,
-  "updateExisting": false
+  "updateExisting": false,
+  "rateLimitDelay": 500,
+  "downloadImages": false
 }

@@ -2,6 +2,7 @@
 import { Actor } from 'apify';
 import { CheerioCrawler } from 'crawlee';
 import TurndownService from 'turndown';
+import cheerio from 'cheerio';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -37,6 +38,17 @@ await Actor.main(async () => {
         }
     }
 
+    // Load vault config (defaults) and template (overrides)
+    const vaultConfig = actualInput.vaultPath ? await loadVaultConfig(actualInput.vaultPath) : {};
+    let templateConfig = {};
+    if (actualInput.templatePath && actualInput.vaultPath) {
+        templateConfig = await loadTemplateConfig(actualInput.vaultPath, actualInput.templatePath);
+        if (Object.keys(templateConfig).length > 0) console.log('✓ Loaded template configuration from', actualInput.templatePath);
+    }
+
+    // Merge configs: vault defaults < user input < template (template overrides input)
+    actualInput = { ...vaultConfig, ...(actualInput || {}), ...templateConfig };
+
     const {
         url,
         urls = [],
@@ -47,8 +59,21 @@ await Actor.main(async () => {
         tags = [],
         autoTag = true,
         autoLink = true,
-        bulkMode = false
+        bulkMode = false,
+        updateExisting = false,
+        templatePath = null,
+        rateLimitDelay = 2000, // ms between requests in bulk mode
+        downloadImages = false,
+        imagesFolder = 'images'
     } = actualInput;
+
+    // Performance metrics
+    const metrics = {
+        startTime: Date.now(),
+        urlsProcessed: 0,
+        bytesDownloaded: 0,
+        averageProcessingTime: 0
+    };
 
     console.log('Starting Obsidian MCP Actor...');
     
@@ -69,8 +94,9 @@ await Actor.main(async () => {
     // Process URLs with results tracking
     const results = [];
     
-    for (const processUrl of urlsToProcess) {
-        console.log(`\n━━ Processing: ${processUrl} ━━`);
+    for (let i = 0; i < urlsToProcess.length; i++) {
+        const processUrl = urlsToProcess[i];
+        console.log(`\n[${i + 1}/${urlsToProcess.length}] ━━ Processing: ${processUrl} ━━`);
         try {
             // Normalize URL
             let validUrl = processUrl;
@@ -78,10 +104,31 @@ await Actor.main(async () => {
                 validUrl = 'https://' + processUrl;
             }
 
-            // Step 1: Scrape the website
+            // Step 1: Scrape the website (with retry/backoff)
             console.log('Step 1: Scraping website...');
-            const scrapedData = await scrapeWebsite(validUrl);
+            const urlStartTime = Date.now();
+            const scrapedData = await scrapeWebsite(validUrl, 3);
 
+                    // Extract images (if any) and attach to scrapedData
+            try {
+                scrapedData._images = extractImagesFromHtml(scrapedData.html);
+                if (downloadImages && scrapedData._images && scrapedData._images.length > 0) {
+                    const saved = await downloadImages(scrapedData, vaultPath, folderPath, imagesFolder);
+                    if (saved.length > 0) console.log(`  → Saved ${saved.length} images to ${path.join(folderPath, imagesFolder)}`);
+                }
+            } catch (e) {
+                // non-fatal
+            }
+
+            // Update bytes downloaded metric (approximate)
+            if (scrapedData && scrapedData._bytes) metrics.bytesDownloaded += scrapedData._bytes;
+
+            // Validate scraped content before further processing
+            const validation = validateContent(scrapedData);
+            if (!validation.valid) {
+                console.warn(`⚠️ Content quality issues for ${processUrl}: ${validation.issues.join(', ')}`);
+                // continue processing but note issues in logs
+            }
             // FEATURE 1: Auto-tag generation
             let finalTags = [...tags];
             if (autoTag) {
@@ -97,7 +144,15 @@ await Actor.main(async () => {
 
             // Step 3: Save to Obsidian vault
             console.log('Step 3: Saving to Obsidian vault...');
-            const fileName = noteName || sanitizeFileName(scrapedData.title || 'untitled');
+            let fileName = noteName || sanitizeFileName(scrapedData.title || 'untitled');
+
+            // Duplicate detection
+            const isDuplicate = await checkDuplicateNote(vaultPath, path.join(folderPath, fileName));
+            if (isDuplicate && !updateExisting) {
+                console.warn(`⚠️ Note already exists: ${fileName}.md -- appending timestamp to avoid overwrite`);
+                fileName = `${fileName}-${Date.now()}`;
+            }
+
             await saveToVault(vaultPath, folderPath, fileName, markdown);
 
             // FEATURE 3: Auto internal linking
@@ -114,26 +169,48 @@ await Actor.main(async () => {
             console.log('✓ Successfully created note:', fileName);
 
             // Track success
+            const timestamp = new Date().toISOString();
             results.push({
                 success: true,
                 url: processUrl,
                 notePath: path.join(folderPath, `${fileName}.md`),
                 title: scrapedData.title,
                 tags: finalTags,
-                timestamp: new Date().toISOString()
+                timestamp
             });
+
+            // Update performance metrics
+            const processingTime = Date.now() - urlStartTime;
+            metrics.averageProcessingTime = (metrics.averageProcessingTime * metrics.urlsProcessed + processingTime) / (metrics.urlsProcessed + 1);
+            metrics.urlsProcessed += 1;
 
         } catch (urlError) {
             console.error(`✗ Error processing ${processUrl}:`, urlError.message);
             // Track failure but continue
+            const timestamp = new Date().toISOString();
             results.push({
                 success: false,
                 url: processUrl,
-                error: urlError.message
+                error: urlError.message,
+                timestamp
             });
+
+            // Update metrics for failed attempt
+            try {
+                const processingTime = Date.now() - urlStartTime;
+                metrics.averageProcessingTime = (metrics.averageProcessingTime * metrics.urlsProcessed + processingTime) / (metrics.urlsProcessed + 1);
+                metrics.urlsProcessed += 1;
+            } catch (e) {
+                // ignore if urlStartTime not defined
+            }
+        }
+
+        // Rate limiting between requests in bulk mode
+        if (bulkMode && i < urlsToProcess.length - 1 && rateLimitDelay > 0) {
+            console.log(`⏳ Waiting ${rateLimitDelay/1000}s before next URL...`);
+            await new Promise(res => setTimeout(res, rateLimitDelay));
         }
     }
-
     // Output batch results
     if (bulkMode && results.length > 1) {
         console.log(`\n━━ BULK IMPORT SUMMARY ━━`);
@@ -142,6 +219,14 @@ await Actor.main(async () => {
         console.log(`Failed: ${results.filter(r => !r.success).length}`);
     }
 
+    // Performance summary
+    const totalTime = (Date.now() - metrics.startTime) / 1000;
+    console.log('\n━━ PERFORMANCE METRICS ━━');
+    console.log(`Total time: ${totalTime.toFixed(2)}s`);
+    console.log(`Processed URLs: ${metrics.urlsProcessed}`);
+    console.log(`Average per-URL: ${(metrics.averageProcessingTime / 1000).toFixed(2)}s`);
+    console.log(`Bytes downloaded (approx): ${metrics.bytesDownloaded} bytes`);
+
     await Actor.pushData({
         success: results.every(r => r.success),
         processedCount: results.length,
@@ -149,30 +234,7 @@ await Actor.main(async () => {
     });
 });
 
-/**
- * FEATURE 1: Extract intelligent tags from content
- */
-function extractTags(scrapedData) {
-    const text = (scrapedData.title + ' ' + scrapedData.metadata.description + ' ' + scrapedData.text).toLowerCase();
-    const foundTags = [];
-
-    for (const keyword of COMMON_KEYWORDS) {
-        if (text.includes(keyword.toLowerCase())) {
-            foundTags.push(keyword);
-        }
-    }
-
-    // Also extract domain-based tag
-    try {
-        const url = new URL(scrapedData.url);
-        const domain = url.hostname.replace('www.', '').split('.')[0];
-        foundTags.push(domain);
-    } catch (e) {
-        // Ignore URL parsing errors
-    }
-
-    return [...new Set(foundTags)]; // Remove duplicates
-}
+import { sanitizeFileName, validateContent, extractTags, loadTemplateConfig, loadVaultConfig, extractImagesFromHtml, downloadImages, checkDuplicateNote } from './lib/helpers.js';
 
 /**
  * FEATURE 3: Update internal links in related notes
@@ -258,10 +320,10 @@ async function scanVaultForNotes(vaultPath) {
 }
 
 /**
- * Scrape website using Crawlee's CheerioCrawler (lightweight, free)
+ * Scrape website using Crawlee's CheerioCrawler with retry/backoff
  */
-async function scrapeWebsite(url) {
-    return new Promise((resolve, reject) => {
+async function scrapeWebsite(url, retries = 3) {
+    const runOnce = () => new Promise((resolve, reject) => {
         let scrapedData = null;
 
         const crawler = new CheerioCrawler({
@@ -286,36 +348,26 @@ async function scrapeWebsite(url) {
                              '';
 
                 // Extract main content
-                // Try common content containers
                 let content = '';
                 const contentSelectors = [
-                    'article',
-                    'main',
-                    '[role="main"]',
-                    '.content',
-                    '.post-content',
-                    '.article-content',
-                    '#content',
-                    'body'
+                    'article', 'main', '[role="main"]', '.content', '.post-content',
+                    '.article-content', '#content', 'body'
                 ];
 
                 for (const selector of contentSelectors) {
                     const element = $(selector).first();
                     if (element.length > 0) {
-                        // Remove script, style, nav, header, footer
                         element.find('script, style, nav, header, footer, .advertisement').remove();
                         content = element.html();
                         break;
                     }
                 }
 
-                // If still no content, get the whole body
                 if (!content) {
                     $('script, style, nav, header, footer').remove();
                     content = $('body').html() || body;
                 }
 
-                // Extract text for preview
                 const text = $.text().trim().substring(0, 500);
 
                 scrapedData = {
@@ -345,6 +397,28 @@ async function scrapeWebsite(url) {
             })
             .catch(reject);
     });
+
+    // Retry loop with exponential backoff
+    let lastErr = null;
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            const result = await runOnce();
+            // Track approximate bytes downloaded if available
+            if (result && result.html) {
+                result._bytes = Buffer.byteLength(result.html, 'utf8');
+            }
+            return result;
+        } catch (err) {
+            lastErr = err;
+            console.warn(`Attempt ${attempt}/${retries} failed for ${url}: ${err.message}`);
+            if (attempt < retries) {
+                const wait = attempt * 1000;
+                await new Promise(res => setTimeout(res, wait));
+            }
+        }
+    }
+
+    throw lastErr || new Error('Failed to scrape URL');
 }
 
 /**
@@ -392,6 +466,16 @@ function convertToMarkdown(data, addMetadata, tags) {
         markdown += converted + '\n\n';
     }
 
+    // Optionally list extracted images at the end of the note
+    if (data._images && data._images.length > 0) {
+        markdown += '\n---\n\n';
+        markdown += '## Images\n\n';
+        for (const img of data._images) {
+            markdown += `- ![${img.alt || ''}](${img.src})` + '\n';
+        }
+        markdown += '\n';
+    }
+
     // Add metadata section at the bottom
     if (data.metadata.description || data.metadata.author) {
         markdown += '\n---\n\n';
@@ -419,17 +503,4 @@ async function saveToVault(vaultPath, folderPath, fileName, content) {
 
     // Write the markdown file
     await fs.writeFile(fullFilePath, content, 'utf8');
-
-    console.log('Note saved to:', fullFilePath);
-}
-
-/**
- * Sanitize filename for file system
- */
-function sanitizeFileName(name) {
-    return name
-        .replace(/[<>:"/\\|?*]/g, '') // Remove invalid characters
-        .replace(/\s+/g, '-') // Replace spaces with hyphens
-        .toLowerCase()
-        .substring(0, 100); // Limit length
 }
