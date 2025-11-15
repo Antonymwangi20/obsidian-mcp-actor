@@ -27,9 +27,13 @@ A powerful Apify Actor that bridges Obsidian note-taking workflows with web scra
 - **Conditional formatting**: Apply different processing rules based on content type
 
 ### Scheduled Scraping Jobs
-- **Integration with Apify scheduler**: Set up recurring runs to keep content fresh
-- **Existing note updates**: Option to update vs. create new notes
-- **Change tracking**: Timestamps track when content was last scraped
+- **See [SCHEDULED_SCRAPING.md](./SCHEDULED_SCRAPING.md) for complete setup guide**
+
+### AI-Powered Integration (MCP)
+- **Claude integration**: Expose scraping capabilities to Claude/LLM via Model Context Protocol
+- **5 exposed tools**: scrape_website, extract_tags, validate_content, convert_html_to_markdown, save_note
+- **AI workflows**: Let Claude orchestrate complex scraping and note creation tasks
+- **See [MCP_SERVER.md](./MCP_SERVER.md) for integration guide**
 
 ## ⚙️ Configuration
 
