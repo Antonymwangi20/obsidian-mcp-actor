@@ -1,0 +1,52 @@
+{
+  "title": "Obsidian MCP Actor Input",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "url": {
+      "title": "Website URL",
+      "type": "string",
+      "description": "The URL of the website to scrape",
+      "editor": "textfield",
+      "example": "https://example.com/article"
+    },
+    "vaultPath": {
+      "title": "Obsidian Vault Path",
+      "type": "string",
+      "description": "Absolute path to your Obsidian vault folder",
+      "editor": "textfield",
+      "example": "/Users/yourname/Documents/MyVault"
+    },
+    "noteName": {
+      "title": "Note Name (Optional)",
+      "type": "string",
+      "description": "Custom name for the note. If not provided, will use the page title",
+      "editor": "textfield",
+      "example": "my-research-note"
+    },
+    "folderPath": {
+      "title": "Folder Path",
+      "type": "string",
+      "description": "Subfolder within vault to save notes (relative to vault root)",
+      "editor": "textfield",
+      "default": "scraped",
+      "example": "research/web-articles"
+    },
+    "addMetadata": {
+      "title": "Add Metadata",
+      "type": "boolean",
+      "description": "Include YAML front-matter with metadata",
+      "default": true,
+      "editor": "checkbox"
+    },
+    "tags": {
+      "title": "Tags",
+      "type": "array",
+      "description": "Tags to add to the note",
+      "editor": "stringList",
+      "default": [],
+      "example": ["research", "web-scraping"]
+    }
+  },
+  "required": ["url", "vaultPath"]
+}

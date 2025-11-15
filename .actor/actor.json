@@ -1,0 +1,8 @@
+{
+  "actorSpecification": 1,
+  "name": "obsidian-mcp-actor",
+  "version": "1.0.0",
+  "buildTag": "latest",
+  "environmentVariables": {},
+  "dockerfile": "./Dockerfile"
+}

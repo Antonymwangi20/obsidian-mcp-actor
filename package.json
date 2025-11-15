@@ -1,0 +1,25 @@
+{
+  "name": "obsidian-mcp-actor",
+  "version": "1.0.0",
+  "description": "Apify Actor that scrapes websites and saves content to Obsidian vault",
+  "type": "module",
+  "main": "main.js",
+  "scripts": {
+    "start": "node main.js",
+    "test": "echo \"No tests yet\" && exit 0"
+  },
+  "dependencies": {
+    "apify": "^3.1.0",
+    "apify-client": "^2.8.0",
+    "turndown": "^7.1.2"
+  },
+  "keywords": [
+    "apify",
+    "obsidian",
+    "mcp",
+    "web-scraping",
+    "knowledge-management"
+  ],
+  "author": "Mwangi Antony",
+  "license": "MIT"
+}
