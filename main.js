@@ -77,6 +77,9 @@ await Actor.main(async () => {
         averageProcessingTime: 0
     };
 
+    // Shared in-memory cache for this run (optional)
+    const cache = new ScrapeCache();
+
     console.log('Starting Obsidian MCP Actor...');
     
     // FEATURE 2: Bulk mode support
@@ -109,13 +112,15 @@ await Actor.main(async () => {
             // Step 1: Scrape the website (with retry/backoff)
             console.log('Step 1: Scraping website...');
             const urlStartTime = Date.now();
-            
+
+            // Use Crawlee (Cheerio) first; if it fails and Playwright is enabled, fall back to Playwright.
             let scrapedData;
             if (usePlaywright) {
-                console.log('  → Using Playwright mode (JavaScript rendering enabled)');
-                scrapedData = await scrapeWebsitePlaywright(validUrl, 3, playwrightTimeout);
+                console.log('  → Crawlee first; Playwright fallback enabled');
+                scrapedData = await scrapeWebsiteWithFailover(validUrl, true, cache, 3);
             } else {
-                scrapedData = await scrapeWebsite(validUrl, 3);
+                console.log('  → Crawlee only (Playwright disabled)');
+                scrapedData = await scrapeWebsiteWithFailover(validUrl, false, cache, 3);
             }
 
                     // Extract images (if any) and attach to scrapedData

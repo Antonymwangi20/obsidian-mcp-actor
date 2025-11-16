@@ -62,8 +62,10 @@ async function runIntegrationTest() {
             "https://example.com",
             "https://www.design.com/website-builder?code=webmasem&utm_medium=cpc&utm_source=google&utm_campaign=row_website_builder_ai_max&utm_adgroup=websites&utm_content=768598867564&utm_keyword=site+creator&utm_network=g&gad_source=1&gad_campaignid=21716717486&gclid=EAIaIQobChMIyOWWrv70kAMVUqb9BR1xgR2_EAAYAyAAEgLnJ_D_BwE"
         ],
-        "vaultPath": "/home/mwangi/Documents/ObsidianMCP",
-        "folderPath": "brand",
+    // Use the temporary vault created for tests so CI doesn't write to user folders
+    "vaultPath": tempVault,
+    // Keep notes inside the test vault under 'scraped' to match assertions below
+    "folderPath": "scraped",
         "addMetadata": true,
         "tags": ["test"],
         "autoTag": true,
@@ -72,7 +74,8 @@ async function runIntegrationTest() {
         "updateExisting": true,
         "rateLimitDelay": 500,
         "downloadImages": true,
-        "usePlaywright": true
+        // Disable Playwright in CI tests (browsers may not be installed). Tests use Cheerio mode.
+        "usePlaywright": false
     };
     const inputFile = path.join(process.cwd(), 'input.json');
     await fs.writeFile(inputFile, JSON.stringify(input, null, 2));
