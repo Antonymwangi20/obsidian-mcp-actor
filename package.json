@@ -33,5 +33,14 @@
     "knowledge-management"
   ],
   "author": "Mwangi Antony",
-  "license": "MIT"
+  "license": "MIT",
+
+  "engines": {
+    "node": ">=18.17.0"
+  },
+  "overrides": {
+    "got": "^13.0.0",
+    "commander": "^11.0.0",
+    "decompress-response": "^6.0.0"
+  }
 }
