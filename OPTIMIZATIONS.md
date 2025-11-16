@@ -475,6 +475,15 @@ const data = await scrapeWebsiteWithFailover(
 
 All optimizations are **backward compatible** and work with existing input configurations.
 
----
+## Repository refactor (v1.2.0)
 
-**Your Actor is now BUILT DIFFERENT.** 🚀
+As part of ongoing maintenance, the codebase was reorganized to improve separation of concerns:
+
+- Utility modules were moved into `lib/utils/` (URL helpers, file helpers, metadata extractors, stealth helpers, retry logic).
+- `lib/helpers.js` now acts as a thin compatibility layer that re-exports utilities for existing callers.
+- A persistent disk-backed cache (`lib/cache/PersistentScrapeCache.js`) was added to retain scrape results between runs.
+- Global safety: `MAX_CONTENT_SIZE` was introduced to protect Node.js from very large HTML payloads.
+
+See the `README.md` migration note for usage examples and upgrade guidance.
+
+---

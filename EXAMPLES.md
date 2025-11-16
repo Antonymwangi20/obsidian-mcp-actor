@@ -468,5 +468,3 @@ These examples show real-world scenarios where the 8 optimizations shine:
 | Error Recovery | Retry + Fallback | Reliability |
 
 ---
-
-**Ready to make your Actor production-grade?** Start with Example 1, then explore the others. 🚀

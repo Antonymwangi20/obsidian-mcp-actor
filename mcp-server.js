@@ -20,6 +20,7 @@ import {
     downloadImages,
     checkDuplicateNote,
 } from '../lib/helpers.js';
+import { UnifiedScraper } from '../lib/processor/UnifiedScraper.js';
 
 const COMMON_KEYWORDS = [
     'research', 'analysis', 'data', 'technology', 'science', 'business',
@@ -43,6 +44,9 @@ const server = new Server({
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request;
 
+    if (name === 'health_check') {
+        return { content: [{ type: 'text', text: 'OK' }] };
+    }
     if (name === 'scrape_website') {
         const { url, retries = 3 } = args;
         if (!url) throw new Error('url is required');
@@ -256,96 +260,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 });
 
 async function scrapeWebsite(url, retries = 3) {
-    // Validate and normalize URL
-    let normalizedUrl = url;
-    try {
-        new URL(normalizedUrl);
-    } catch (e) {
-        throw new Error(`Invalid URL format: ${url} - ${e.message}`);
-    }
-
-    const runOnce = () => new Promise((resolve, reject) => {
-        let scrapedData = null;
-        let requestWasProcessed = false;
-        
-        const crawler = new CheerioCrawler({
-            maxRequestsPerCrawl: 1,
-            maxRequestRetries: 1,
-            maxRequestsPerMinute: 60,
-            navigationTimeoutSecs: 30,
-            requestHandlerTimeoutSecs: 60,
-            requestHandler: async ({ request, $, body }) => {
-                requestWasProcessed = true;
-                
-                const title = $('title').text() || $('h1').first().text() || $('meta[property="og:title"]').attr('content') || 'Untitled';
-                const description = $('meta[name="description"]').attr('content') || $('meta[property="og:description"]').attr('content') || '';
-                const author = $('meta[name="author"]').attr('content') || $('meta[property="article:author"]').attr('content') || '';
-                let content = '';
-                const contentSelectors = ['article', 'main', '[role="main"]', '.content', '.post-content', '.article-content', '#content', 'body'];
-                for (const selector of contentSelectors) {
-                    const element = $(selector).first();
-                    if (element.length > 0) {
-                        element.find('script, style, nav, header, footer, .advertisement').remove();
-                        content = element.html();
-                        break;
-                    }
-                }
-                if (!content) {
-                    $('script, style, nav, header, footer').remove();
-                    content = $('body').html() || body;
-                }
-                const text = $.text().trim().substring(0, 500);
-                scrapedData = {
-                    url: request.url,
-                    title: title.trim(),
-                    html: content || body,
-                    text: text,
-                    metadata: { description: description.trim(), author: author.trim() }
-                };
-            },
-            failedRequestHandler: async ({ request }) => {
-                console.error(`✗ Request handler failed for ${request.url}`);
-            }
-        });
-
-        // Add custom headers to appear as legitimate browser
-        const requestList = [{
-            url: normalizedUrl,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
-                'Accept-Encoding': 'gzip, deflate',
-                'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1'
-            }
-        }];
-
-        crawler.run(requestList)
-            .then(() => {
-                if (!requestWasProcessed) {
-                    reject(new Error(`Crawler did not process the request - URL may be blocked, invalid, or require JavaScript rendering`));
-                } else if (scrapedData) {
-                    resolve(scrapedData);
-                } else {
-                    reject(new Error('No data scraped from URL'));
-                }
-            })
-            .catch(reject);
-    });
-
-    let lastErr = null;
-    for (let attempt = 1; attempt <= retries; attempt++) {
-        try {
-            return await runOnce();
-        } catch (err) {
-            lastErr = err;
-            if (attempt < retries) {
-                await new Promise(res => setTimeout(res, attempt * 1000));
-            }
-        }
-    }
-    throw lastErr || new Error('Failed to scrape URL after all retries');
+    const scraper = new UnifiedScraper({ retries });
 }
 
 async function main() {
